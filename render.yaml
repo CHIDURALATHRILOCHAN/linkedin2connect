@@ -9,7 +9,7 @@ services:
     plan: free
     envVars:
       - key: PORT
-        value: 8000
+        value: "8000"
       - key: DATABASE_URL
         fromDatabase:
           name: achievement2linkedin-db
@@ -37,7 +37,7 @@ services:
     plan: free
     envVars:
       - key: PORT
-        value: 3000
+        value: "3000"
       - key: NEXT_PUBLIC_API_URL
         value: https://achievement2linkedin-backend.onrender.com
 
@@ -47,4 +47,3 @@ databases:
     region: singapore
     plan: free
     databaseName: achievement2linkedin
-    user: postgres
