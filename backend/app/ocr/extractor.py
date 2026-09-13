@@ -87,11 +87,25 @@ class DocumentExtractionService:
         return self._rule_based_parse(raw_text_lines)
 
     def _extract_text_from_image(self, filepath: str) -> List[str]:
-        """Runs EasyOCR on image file and returns extracted text lines."""
+        """Runs Tesseract OCR / EasyOCR on image file and returns extracted text lines."""
         if not os.path.exists(filepath):
             logger.error(f"File not found: {filepath}")
             return []
 
+        # 1. Primary: Try pytesseract (Native C++ OCR engine)
+        try:
+            import pytesseract
+            from PIL import Image
+            img = Image.open(filepath)
+            text = pytesseract.image_to_string(img)
+            lines = [str(line).strip() for line in text.splitlines() if str(line).strip()]
+            if lines and len(lines) >= 2:
+                logger.info(f"pytesseract extracted {len(lines)} lines from {filepath}")
+                return lines
+        except Exception as e:
+            logger.warning(f"pytesseract extraction fallback: {str(e)}")
+
+        # 2. Secondary: Try EasyOCR fallback
         try:
             reader = self._get_ocr_reader()
             results = reader.readtext(filepath, detail=0)
@@ -130,30 +144,41 @@ class DocumentExtractionService:
         recipient_name = ""
         name_confidence = 0.0
 
-        for i, line in enumerate(lines):
-            # Check for trigger phrase on same line
-            m = re.search(
-                r"(?:this\s+is\s+to\s+certify\s+that|certifies\s+that|certify\s+that|awarded\s+to|presented\s+to|conferred\s+upon|granted\s+to)\s+([A-Za-z\s\.\'\-]{3,40})",
-                line,
-                re.IGNORECASE
-            )
-            if m:
-                extracted = m.group(1).strip()
-                # Ensure it's not a connecting word
-                if not re.match(r"^(?:the|an?|for|in|from|that)$", extracted, re.I):
-                    recipient_name = extracted
-                    name_confidence = 0.95
-                    break
+        # First check single_line_text for trigger phrase + name (e.g. "This is to certify that Chidurala Thrilochan from...")
+        m_single = re.search(
+            r"(?:this\s+is\s+to\s+certify\s+that|certifies\s+that|certify\s+that|awarded\s+to|presented\s+to|conferred\s+upon|granted\s+to)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)(?=\s+(?:from|for|in|on|with|as|team|has|is)\b|\.|$|,)",
+            single_line_text,
+            re.IGNORECASE
+        )
+        if m_single:
+            extracted = m_single.group(1).strip()
+            if len(extracted) >= 3 and not re.match(r"^(?:the|an?|for|in|from|that)$", extracted, re.I):
+                recipient_name = extracted
+                name_confidence = 0.96
 
-            # Check if current line is the trigger and next line is the name
-            if re.search(r"^(?:this\s+is\s+to\s+)?certify\s+that\b|^\s*awarded\s+to\b|^\s*presented\s+to\b|^\s*certifies\s+that\b", line, re.I):
-                if i + 1 < len(lines):
-                    candidate = lines[i + 1].strip()
-                    # Filter out common false positives
-                    if candidate and not re.search(r"\b(?:from|for|in|on|with|as|team)\b", candidate, re.I):
-                        recipient_name = candidate
-                        name_confidence = 0.96
+        if not recipient_name:
+            for i, line in enumerate(lines):
+                # Check for trigger phrase on same line
+                m = re.search(
+                    r"(?:this\s+is\s+to\s+certify\s+that|certifies\s+that|certify\s+that|awarded\s+to|presented\s+to|conferred\s+upon|granted\s+to)\s+([A-Za-z\s\.\'\-]{3,40})",
+                    line,
+                    re.IGNORECASE
+                )
+                if m:
+                    extracted = m.group(1).strip()
+                    if not re.match(r"^(?:the|an?|for|in|from|that)$", extracted, re.I):
+                        recipient_name = extracted
+                        name_confidence = 0.95
                         break
+
+                # Check if current line is the trigger and next line is the name
+                if re.search(r"^(?:this\s+is\s+to\s+)?certify\s+that\b|^\s*awarded\s+to\b|^\s*presented\s+to\b|^\s*certifies\s+that\b", line, re.I):
+                    if i + 1 < len(lines):
+                        candidate = lines[i + 1].strip()
+                        if candidate and not re.search(r"\b(?:from|for|in|on|with|as|team)\b", candidate, re.I):
+                            recipient_name = candidate
+                            name_confidence = 0.96
+                            break
 
         # 2. Achievement Title
         achievement_title = ""
