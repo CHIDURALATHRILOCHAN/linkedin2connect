@@ -15,6 +15,9 @@ class LinkedInService:
             # Synthetic redirect to backend callback in mock mode
             return f"{settings.BACKEND_URL}{settings.API_V1_STR}/linkedin/callback?code=mock_authorization_code_123&state={state}"
 
+        if not settings.LINKEDIN_CLIENT_ID or settings.LINKEDIN_CLIENT_ID.startswith(("YOUR_", "your_")):
+            raise ValueError("Live LinkedIn App Credentials missing! Please set LINKEDIN_CLIENT_ID and LINKEDIN_CLIENT_SECRET in your Render backend environment variables.")
+
         params = {
             "response_type": "code",
             "client_id": settings.LINKEDIN_CLIENT_ID,

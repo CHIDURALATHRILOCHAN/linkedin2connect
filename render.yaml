@@ -21,7 +21,7 @@ services:
       - key: BACKEND_URL
         value: https://achievement2linkedin-backend.onrender.com
       - key: LINKEDIN_MOCK_MODE
-        value: "true"
+        value: "false"
       - key: AI_MOCK_MODE
         value: "true"
       - key: LINKEDIN_REDIRECT_URI
