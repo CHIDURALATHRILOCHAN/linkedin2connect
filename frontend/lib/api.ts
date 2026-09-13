@@ -1,9 +1,25 @@
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8000/api/v1";
+const getApiBase = () => {
+  if (process.env.NEXT_PUBLIC_API_BASE) {
+    return process.env.NEXT_PUBLIC_API_BASE.replace(/\/$/, "");
+  }
+  if (process.env.NEXT_PUBLIC_API_URL) {
+    const url = process.env.NEXT_PUBLIC_API_URL.replace(/\/$/, "");
+    return url.endsWith("/api/v1") ? url : `${url}/api/v1`;
+  }
+  if (typeof window !== "undefined") {
+    // Automatic fallback for Render production domain
+    if (window.location.hostname.includes("onrender.com")) {
+      return "https://achievement2linkedin-backend.onrender.com/api/v1";
+    }
+  }
+  return "http://localhost:8000/api/v1";
+};
 
 export async function apiRequest<T>(
   endpoint: string,
   options: RequestInit = {}
 ): Promise<T> {
+  const API_BASE = getApiBase();
   const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
 
   const headers: Record<string, string> = {
