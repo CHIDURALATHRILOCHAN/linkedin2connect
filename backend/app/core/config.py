@@ -1,12 +1,10 @@
 import os
 from pathlib import Path
 from typing import List, Union
-from pydantic import AnyHttpUrl, validator
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
-# Resolve the .env file path relative to the backend directory (where manage.py/requirements.txt live)
-# This ensures .env is found regardless of the current working directory
-_BACKEND_DIR = Path(__file__).resolve().parent.parent.parent  # backend/app/core -> backend/
+# Resolve the .env file path relative to the backend directory
+_BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
 _ROOT_DIR = _BACKEND_DIR.parent
 _ENV_FILE = (_ROOT_DIR / ".env") if (_ROOT_DIR / ".env").exists() else (_BACKEND_DIR / ".env")
 
@@ -46,10 +44,10 @@ class Settings(BaseSettings):
     STORAGE_DIR: str = "uploads"
     STORAGE_BUCKET: str = "achievement2linkedin-uploads"
 
-    class Config:
-        case_sensitive = True
-        env_file = str(_ENV_FILE)
-        extra = "ignore"
+    model_config = SettingsConfigDict(
+        case_sensitive=True,
+        env_file=str(_ENV_FILE),
+        extra="ignore"
+    )
 
 settings = Settings()
-
