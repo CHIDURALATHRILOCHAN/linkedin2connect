@@ -73,24 +73,55 @@ class PostGenerationService:
             f"3. option_id: 3, title: 'Impactful Industry Summary & Lessons Learned', tone: 'Impactful', caption: '...', hashtags: [...], suggested_skills: [...]"
         )
 
+        gemini_key = os.getenv("GEMINI_API_KEY") or (settings.AI_API_KEY if settings.AI_PROVIDER == "gemini" else None)
+
         if settings.AI_PROVIDER == "openai":
-            resp = httpx.post(
-                "https://api.openai.com/v1/chat/completions",
-                headers={"Authorization": f"Bearer {settings.AI_API_KEY}"},
-                json={
-                    "model": "gpt-4o-mini",
-                    "messages": [{"role": "user", "content": prompt}],
-                    "response_format": {"type": "json_object"}
-                },
-                timeout=20.0
-            )
-            if resp.status_code == 200:
-                content = resp.json()["choices"][0]["message"]["content"]
-                parsed = json.loads(content)
-                if isinstance(parsed, dict) and "variations" in parsed:
-                    return parsed["variations"]
-                if isinstance(parsed, list):
-                    return parsed
+            try:
+                resp = httpx.post(
+                    "https://api.openai.com/v1/chat/completions",
+                    headers={"Authorization": f"Bearer {settings.AI_API_KEY}"},
+                    json={
+                        "model": "gpt-4o-mini",
+                        "messages": [{"role": "user", "content": prompt}],
+                        "response_format": {"type": "json_object"}
+                    },
+                    timeout=20.0
+                )
+                if resp.status_code == 200:
+                    content = resp.json()["choices"][0]["message"]["content"]
+                    parsed = json.loads(content)
+                    if isinstance(parsed, dict) and "variations" in parsed:
+                        return parsed["variations"]
+                    if isinstance(parsed, list):
+                        return parsed
+            except Exception as e:
+                logger.warning(f"OpenAI post generation error: {str(e)}")
+
+        if settings.AI_PROVIDER == "gemini" or gemini_key:
+            if gemini_key and not gemini_key.startswith(("mock_", "YOUR_")):
+                try:
+                    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={gemini_key}"
+                    g_prompt = prompt + "\n\nCRITICAL: Return ONLY raw valid JSON matching the requested structure without markdown ```json wrapping."
+                    resp = httpx.post(
+                        url,
+                        headers={"Content-Type": "application/json"},
+                        json={"contents": [{"parts": [{"text": g_prompt}]}]},
+                        timeout=25.0
+                    )
+                    if resp.status_code == 200:
+                        text = resp.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
+                        if text.startswith("```"):
+                            text = text.split("```")[1]
+                            if text.startswith("json"):
+                                text = text[4:].strip()
+                        parsed = json.loads(text)
+                        if isinstance(parsed, dict) and "variations" in parsed:
+                            return parsed["variations"]
+                        if isinstance(parsed, list):
+                            return parsed
+                except Exception as e:
+                    logger.warning(f"Gemini post generation error: {str(e)}")
+
         return None
 
     def _template_generation(
@@ -131,10 +162,20 @@ class PostGenerationService:
                 tag_pool.append(dt)
 
         extra_bullets = ""
-        if extra_responses:
-            lines = [f"• {k.replace('_', ' ').capitalize()}: {v}" for k, v in extra_responses.items() if v]
+        if extra_responses and isinstance(extra_responses, dict):
+            lines = []
+            for k, v in extra_responses.items():
+                if v and str(v).strip():
+                    val = str(v).strip()
+                    if k.lower() in ["q1", "project_name", "project_details"]:
+                        lines.append(f"📌 Project / Key Tech Stack: {val}")
+                    elif k.lower() in ["q2", "role", "contribution"]:
+                        lines.append(f"👨‍💻 Role & Main Contribution: {val}")
+                    else:
+                        label = k.replace("_", " ").capitalize()
+                        lines.append(f"• {label}: {val}")
             if lines:
-                extra_bullets = "\n\nKey Focus Areas:\n" + "\n".join(lines)
+                extra_bullets = "\n\n💡 Key Project & Engineering Context:\n" + "\n".join(lines)
 
         is_hackathon = achievement_type.lower() == "hackathon" or "hackathon" in title.lower()
         is_award = achievement_type.lower() == "award" or "award" in title.lower() or "winner" in title.lower()

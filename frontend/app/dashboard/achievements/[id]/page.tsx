@@ -163,6 +163,29 @@ export default function AchievementWorkspacePage() {
     setError("");
 
     try {
+      // Always save updated verification details and extra responses context first
+      const skillsArray = skillsStr.split(",").map((s) => s.trim()).filter((s) => s.length > 0);
+      const verifiedPayload = {
+        recipient_name: recipientName,
+        achievement_title: achievementTitle,
+        issuing_organization: issuingOrg,
+        issue_date: issueDate,
+        certificate_id: certificateId,
+        achievement_type: achievementType,
+        skills: skillsArray,
+        description: description,
+        extra_responses: {
+          q1: extraQuestion1,
+          q2: extraQuestion2
+        }
+      };
+
+      const updated = await apiRequest<Achievement>(`/achievements/${id}/verify`, {
+        method: "PATCH",
+        body: JSON.stringify(verifiedPayload),
+      });
+      setAchievement(updated);
+
       const postResponse = await apiRequest<PostData>("/posts/generate", {
         method: "POST",
         body: JSON.stringify({
